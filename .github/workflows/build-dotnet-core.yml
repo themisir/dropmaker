@@ -1,0 +1,33 @@
+name: .NET Core
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v1
+      with:
+        dotnet-version: 3.1.101
+    - name: Install dependencies
+      run: dotnet restore ref
+    - name: Build
+      run: dotnet build ref --configuration Release --no-restore
+    - name: Zip Release
+      uses: TheDoctor0/zip-release@v0.3.0
+      with:
+        filename: release.zip
+        path: src/bin/Release/*/
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: release.zip
+        path: release.zip
