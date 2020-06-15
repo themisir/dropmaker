@@ -28,7 +28,7 @@ namespace Dropmaker
         {
             TotalTasks = Tasks.Count;
 
-            for (var i = 0; i < ThreadCount; i++)
+            for (var i = 0; i < Math.Min(ThreadCount, Tasks.Count); i++)
             {
                 Thread thread = new Thread(Work);
                 Threads.Add(thread);
