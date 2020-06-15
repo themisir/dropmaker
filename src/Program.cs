@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using Serilog;
 using ShellProgressBar;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
@@ -70,6 +71,11 @@ namespace Dropmaker
 
                     program.Run(o.Input, o.Output);
                 });
+
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.File("dropmaker.log", rollingInterval: RollingInterval.Day)
+                .CreateLogger();
         }
 
         private Image watermark;
@@ -271,6 +277,8 @@ namespace Dropmaker
         {
             state.ProgressBar.Tick(string.Format("Processing {0}...", state.Path));
 
+            Log.Debug("Mutating {0} into {1}", state.Path, state.NewPath);
+
             try
             {
                 Image image = Image.Load(state.Path);
@@ -300,7 +308,7 @@ namespace Dropmaker
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine(string.Format("Failed to mutate {0}.\n{1}", state.Path, e.ToString()));
+                Log.Error(e, "Failed to mutate {0}", state.Path);
             }
         }
     }
