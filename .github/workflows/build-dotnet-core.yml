@@ -21,9 +21,9 @@ jobs:
       - name: Build
         run: dotnet build ref --configuration Release --no-restore
       - name: Copy files
-        run: cp src/bin/Release/**/* bin
+        run: cp src/bin/Release/**/* output
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v2
         with:
           name: Dropmaker
-          path: bin
+          path: output
