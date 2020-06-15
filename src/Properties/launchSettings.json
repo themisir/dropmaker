@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "Dropmaker": {
+      "commandName": "Project",
+      "commandLineArgs": "-i demo\\source -o demo\\output -q 60 -r min:500",
+      "workingDirectory": ".."
+    }
+  }
+}

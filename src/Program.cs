@@ -1,4 +1,5 @@
 ﻿using CommandLine;
+using ShellProgressBar;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Png;
@@ -38,6 +39,13 @@ namespace Dropmaker
             public int Threads { get; set; }
         }
 
+        public class State
+        {
+            public string Path { get; set; }
+            public string NewPath { get; set; }
+            public ProgressBar ProgressBar { get; set; }
+        }
+
         static void Main(string[] args)
         {
             Configuration.Default.ImageFormatsManager.AddImageFormat(JpegFormat.Instance);
@@ -66,7 +74,7 @@ namespace Dropmaker
 
         private Image watermark;
         private Action<IImageProcessingContext> scaler;
-        private TaskManager taskManager;
+        private TaskManager<State> taskManager;
         private JpegEncoder jpegEncoder;
 
         public void AddWatermark(string path)
@@ -222,7 +230,7 @@ namespace Dropmaker
 
         public void ConfigureThreads(int threads)
         {
-            taskManager = new TaskManager(threads);
+            taskManager = new TaskManager<State>(threads, RunOnce);
         }
 
         public void ConfigureQuality(int quality)
@@ -235,44 +243,65 @@ namespace Dropmaker
 
         public void Run(string directory, string output)
         {
-            foreach (string path in Directory.EnumerateFiles(directory))
+            var files = Directory.EnumerateFiles(directory).ToArray();
+
+            using var pbar = new ProgressBar(files.Length, "Processing...", new ProgressBarOptions
+            {
+                ForegroundColor = ConsoleColor.Yellow,
+                BackgroundColor = ConsoleColor.DarkYellow,
+                ProgressCharacter = '─'
+            });
+
+            foreach (string path in files)
             {
                 string newPath = Path.Combine(output, Path.GetFileNameWithoutExtension(path) + ".jpg");
-                taskManager.AddTask(delegate
+
+                taskManager.Add(new State
                 {
-                    RunOnce(path, newPath);
+                    Path = path,
+                    NewPath = newPath,
+                    ProgressBar = pbar,
                 });
             }
 
             taskManager.Run();
         }
 
-        public void RunOnce(string path, string newPath)
+        public void RunOnce(State state)
         {
-            Image image = Image.Load(path);
+            state.ProgressBar.Tick(string.Format("Processing {0}...", state.Path));
 
-            image.Mutate(ctx =>
+            try
             {
-                ctx.BackgroundColor(Color.White);
+                Image image = Image.Load(state.Path);
 
-                scaler?.Invoke(ctx);
-
-                if (watermark != null)
+                image.Mutate(ctx =>
                 {
-                    Size size = ctx.GetCurrentSize();
-                    int min = Math.Min(size.Width, size.Height);
+                    ctx.BackgroundColor(Color.White);
 
-                    Image resizedMark = watermark.Clone(ctx =>
+                    scaler?.Invoke(ctx);
+
+                    if (watermark != null)
                     {
-                        ctx.Resize(min, min);
-                    });
+                        Size size = ctx.GetCurrentSize();
+                        int min = Math.Min(size.Width, size.Height);
 
-                    ctx.DrawImage(resizedMark, new Point((size.Width - min) / 2, (size.Height - min) / 2), 1);
-                }
-            });
+                        Image resizedMark = watermark.Clone(ctx =>
+                        {
+                            ctx.Resize(min, min);
+                        });
 
-            using Stream fs = File.Create(newPath);
-            image.SaveAsJpeg(fs, jpegEncoder);
+                        ctx.DrawImage(resizedMark, new Point((size.Width - min) / 2, (size.Height - min) / 2), 1);
+                    }
+                });
+
+                using Stream fs = File.Create(state.NewPath);
+                image.SaveAsJpeg(fs, jpegEncoder);
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine(string.Format("Failed to mutate {0}.\n{1}", state.Path, e.ToString()));
+            }
         }
     }
 }

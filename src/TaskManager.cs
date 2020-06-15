@@ -1,51 +1,39 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace Dropmaker
 {
-    public class TaskManager
+    public class TaskManager<TState>
     {
-        public readonly Queue<Action> Tasks;
-        public readonly List<Thread> Threads;
-        public int TotalTasks { get; private set; }
-        public int CompletedTasks => TotalTasks - Tasks.Count;
-        public int ThreadCount { get; private set; }
+        public readonly int ThreadCount;
+        public readonly List<TState> States;
+        public readonly Action<TState> OnTask;
 
-        public TaskManager(int threadCount)
+        public TaskManager(int threadCount, Action<TState> taskRunner)
         {
-            Tasks = new Queue<Action>();
-            Threads = new List<Thread>();
+            States = new List<TState>();
+            OnTask = taskRunner;
             ThreadCount = threadCount;
         }
 
-        public void AddTask(Action task)
+        public void Add(TState state)
         {
-            Tasks.Enqueue(task);
+            States.Add(state);
         }
 
         public void Run()
         {
-            TotalTasks = Tasks.Count;
+            SemaphoreSlim maxThread = new SemaphoreSlim(ThreadCount);
 
-            for (var i = 0; i < Math.Min(ThreadCount, Tasks.Count); i++)
+            foreach (var task in States)
             {
-                Thread thread = new Thread(Work);
-                Threads.Add(thread);
-                thread.Start();
-            }
-        }
+                maxThread.Wait();
 
-        protected void Work()
-        {
-            while (Tasks.Count > 0)
-            {
-                Action task;
-                lock (Tasks)
-                {
-                    task = Tasks.Dequeue();
-                }
-                task.Invoke();
+                Task.Factory
+                    .StartNew(() => OnTask(task), TaskCreationOptions.LongRunning)
+                    .ContinueWith((task) => maxThread.Release());
             }
         }
     }
